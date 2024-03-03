@@ -1,0 +1,5 @@
+/target
+/migration/target
+/.vscode
+/.env
+/data
