@@ -15,10 +15,12 @@ fn find_database_url_from_env() -> Option<String> {
 }
 
 pub async fn get_db() -> Result<DatabaseConnection, DbErr> {
+    
     let database_url = match find_database_url_from_env() {
         Some(url) => url,
         None => DATABASE_DEFAULT_URL.to_owned()
     };
+    println!("DataBase url: {}", database_url);
     let db = Database::connect(database_url).await?;
     Ok(db)
 }

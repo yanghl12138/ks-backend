@@ -1,5 +1,9 @@
-use axum::{http::StatusCode, response::{IntoResponse, Response}};
+use std::fmt::Display;
+
+use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
 use sea_orm::DbErr;
+
+use crate::Msg;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -15,16 +19,37 @@ pub enum Error {
     UploadFail,
     DuplicateFile,
     EmptyFile,
+    UnsportFileType,
 
     //
     TODO,
 }
 
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let output = match self {
+            Error::LoginFail => "Login Fail",
+            Error::InternalError => "Internal Error",
+            Error::InvalidToken => "Invalid Token",
+            Error::EmptyFileName => "Empty Filename",
+            Error::UploadFail => "Uplord Fail",
+            Error::DuplicateFile => "Duplicate File",
+            Error::EmptyFile => "Empty File",
+            Error::TODO => "To Do",
+            Error::UnsportFileType => "UnsportFileType",
+        };
+
+        write!(f, "{}", output)
+    }
+}
+
+impl std::error::Error for Error {}
+
 impl IntoResponse for Error {
     fn into_response(self) -> Response {
         println!("-->> {:<12} -- {self:?}", "INTO-RES");
 
-        (StatusCode::INTERNAL_SERVER_ERROR, "UNHANDLED_CLIENT_ERROR").into_response()
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(Msg {msg: self.to_string()})).into_response()
     }
     
 }

@@ -1,6 +1,7 @@
-use std::{fs::File, io::{Error, Write} };
+use std::io::Error;
 
 use sea_orm::{ActiveValue, DatabaseConnection, DbErr, EntityTrait};
+use tokio::{fs::File, io::AsyncWriteExt};
 
 use crate::entities::{prelude::*, *};
 
@@ -19,8 +20,8 @@ pub async fn add_txt_info
 }
 
 pub async fn write_to_fs(hash: &str, data: &[u8]) -> Result<(), Error>{
-    let mut f = File::create(format!("data/{}", hash))?;
-    let _ = f.write_all(data)?;
+    let mut f = File::create(format!("data/{}", hash)).await?;
+    let _ = f.write_all(data).await?;
     _ = f.flush();
     Ok(())
 }

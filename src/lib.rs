@@ -15,8 +15,8 @@ pub struct Msg {
     pub msg: String
 }
 
-impl Msg {
-    pub fn new(msg: &str) -> Self {
-        Self { msg: msg.to_string() }
+impl From<& str> for Msg{
+    fn from(value: & str) -> Self {
+        Self{ msg: value.to_string() }
     }
 }

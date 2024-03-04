@@ -16,3 +16,7 @@ pub async fn get_txt_by_id(conn: &DatabaseConnection, id: u64) -> Result<Option<
 pub async fn get_txt_by_hash(conn: &DatabaseConnection, hash: &str) -> Result<Option<txt::Model>, DbErr> {
     Txt::find().filter(txt::Column::Hash.eq(hash)).one(conn).await
 }
+
+pub async fn get_all_txt(conn: &DatabaseConnection) -> Result<Vec<txt::Model>, DbErr> {
+    Txt::find().all(conn).await
+}

@@ -30,7 +30,7 @@ impl Keys {
 }
 
 // 用户信息
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Claims {
     exp: usize,
 
@@ -102,7 +102,7 @@ pub async fn login_api
                 let time: usize = SystemTime::now()
                 .duration_since(UNIX_EPOCH).unwrap().as_secs()
                 .try_into().unwrap();
-                time + 60 * 60
+                time + 60 * 60 * 8
             },
 
             id: user.id,

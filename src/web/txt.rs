@@ -1,57 +1,104 @@
-use axum::body::Bytes;
-use axum::extract::{Multipart, State};
-use ring::digest::{Context, Digest, SHA256};
-use data_encoding::HEXUPPER;
-use tokio::join;
+use std::str::from_utf8;
 
-use crate::database::mutation::{add_txt_info, write_to_fs};
-use crate::database::query::{get_txt_by_hash, get_txt_by_id};
-use crate::{entities::txt, AppState};
+use axum::extract::{Multipart, State};
+use axum::Json;
+use data_encoding::HEXUPPER;
+use ring::digest::{Context, SHA256};
+use tantivy::doc;
+
 use super::error::*;
 use super::login::Claims;
+use crate::database::mutation::{add_txt_info, write_to_fs};
+use crate::database::query::{get_txt_by_hash, get_txt_by_id};
+use crate::database::search::{get_fields, get_writer};
+use crate::{entities::txt, AppState};
 
-pub async fn uploard_api(state: State<AppState>, claims: Claims, mut multipart: Multipart) 
--> Result<txt::Model> {
-    // 读取form
-    let mut filename: String = String::new();
-    let mut data: Vec<u8> = Vec::with_capacity(1024);
+async fn save_file(
+    state: State<AppState>,
+    claims: Claims,
+    filename: String,
+    data: Vec<u8>,
+    hash_value: String,
+) -> Result<txt::Model> {
+    // 空文件
+    if data.len() == 0 {
+        return Err(Error::EmptyFile);
+    }
+    // 重复文件
+    match get_txt_by_hash(&state.conn, &hash_value).await? {
+        Some(_) => return Err(Error::DuplicateFile),
+        None => (),
+    }
 
-    // sha256
-    let mut ctx = Context::new(&SHA256);
+    let txt = from_utf8(&data)
+    .map_err(|_| Error::UnsportFileType)?;
 
-    if let Some(mut field) = multipart.next_field().await.map_err(|_| Error::UploadFail)? {
-        filename = match field.file_name() {
+    // 文件信息写入数据库
+    let id: u64 = add_txt_info(
+        &state.conn,
+        &filename,
+        &hash_value,
+        &claims.id,
+        &claims.level,
+    )
+    .await?;
+    //  文件写入本地
+    let _ = write_to_fs(&hash_value, &data)
+        .await
+        .map_err(|_| Error::InternalError)?;
+    // 形成索引
+    let writer = get_writer();
+    let fields = get_fields();
+    let _ = writer.add_document(doc!(
+        fields.Id => id,
+        fields.Title => filename,
+        fields.Body => txt
+    ));
+    _ = writer.commit();
+
+    let new_txt_info: txt::Model = get_txt_by_id(&state.conn, id).await?.unwrap();
+    Ok(new_txt_info)
+}
+
+pub async fn uploard_api(
+    state: State<AppState>,
+    claims: Claims,
+    mut multipart: Multipart,
+) -> Result<Json<Vec<txt::Model>>> {
+    let mut upload_success = Vec::<txt::Model>::with_capacity(16);
+    let mut join_handlers = Vec::with_capacity(16);
+
+    while let Some(mut field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| Error::UploadFail)?
+    {
+        let mut ctx = Context::new(&SHA256);
+        let filename = match field.file_name() {
             Some(n) => n.to_string(),
-            None => return Err(Error::EmptyFileName)
+            None => return Err(Error::EmptyFileName),
         };
+        let mut data: Vec<u8> = Vec::with_capacity(1024);
         while let Some(bytes) = field.chunk().await.map_err(|_| Error::UploadFail)? {
             ctx.update(&bytes);
             data.extend(bytes);
         }
-    }
-    // 非空
-    if data.len() == 0 {
-        return Err(Error::EmptyFile);
-    }
-    let hash_value: String = HEXUPPER.encode(ctx.finish().as_ref());
-    // 查重
-    match
-    get_txt_by_hash(&state.conn, &hash_value).await? {
-        Some(_) => return Err(Error::DuplicateFile),
-        None => (),
-    }
-    
-    // 文件信息写入数据库
-    let id = add_txt_info(&state.conn, &filename, &hash_value, &claims.id, &claims.level)
-    .await?;
-    // 形成倒排索引
-    todo!();
-    // 文件写入本地
-    let _ = write_to_fs(&hash_value, &data).await.map_err(|_| {
-        Error::InternalError
-    })?;
-    
-    let new_txt_info = get_txt_by_id(&state.conn, id).await?.unwrap();
+        let hash_value: String = HEXUPPER.encode(ctx.finish().as_ref());
 
-    Ok(new_txt_info)
+        let f = save_file(state.clone(), claims.clone(), filename, data, hash_value);
+        join_handlers.push(tokio::spawn(f));
+    }
+    for jh in join_handlers {
+        let res = match jh.await {
+            Ok(j) => j,
+            Err(_) => continue,
+        };
+        let res = match res {
+            Ok(j) => j,
+            Err(_) => continue,
+        };
+        upload_success.push(res);
+    }
+
+    Ok(Json(upload_success))
 }
