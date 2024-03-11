@@ -14,24 +14,28 @@ use crate::database::search::{get_fields, get_writer};
 use crate::{entities::txt, AppState};
 
 async fn save_file(
-    state: State<AppState>,
+    state: AppState,
     claims: Claims,
     filename: String,
     data: Vec<u8>,
     hash_value: String,
 ) -> Result<txt::Model> {
+    println!("Saving {}", filename);
     // 空文件
     if data.len() == 0 {
+        println!("Empty File!!!");
         return Err(Error::EmptyFile);
     }
     // 重复文件
     match get_txt_by_hash(&state.conn, &hash_value).await? {
-        Some(_) => return Err(Error::DuplicateFile),
+        Some(_) => {
+            println!("Duplicate File!!!");
+            return Err(Error::DuplicateFile);},
         None => (),
     }
 
     let txt = from_utf8(&data)
-    .map_err(|_| Error::UnsportFileType)?;
+    .map_err(|_| {println!("UnsportFileType"); Error::UnsportFileType})?;
 
     // 文件信息写入数据库
     let id: u64 = add_txt_info(
@@ -48,20 +52,22 @@ async fn save_file(
         .map_err(|_| Error::InternalError)?;
     // 形成索引
     let writer = get_writer();
+    let writer = writer.read().await;
     let fields = get_fields();
     let _ = writer.add_document(doc!(
-        fields.Id => id,
-        fields.Title => filename,
-        fields.Body => txt
+        fields.id => id,
+        fields.title => filename.clone(),
+        fields.body => txt
     ));
-    _ = writer.commit();
 
     let new_txt_info: txt::Model = get_txt_by_id(&state.conn, id).await?.unwrap();
+
+    println!("{} Saved", filename);
     Ok(new_txt_info)
 }
 
-pub async fn uploard_api(
-    state: State<AppState>,
+pub async fn upload_api(
+    State(state): State<AppState>,
     claims: Claims,
     mut multipart: Multipart,
 ) -> Result<Json<Vec<txt::Model>>> {
@@ -75,9 +81,10 @@ pub async fn uploard_api(
     {
         let mut ctx = Context::new(&SHA256);
         let filename = match field.file_name() {
-            Some(n) => n.to_string(),
-            None => return Err(Error::EmptyFileName),
+            Some(n) if !n.is_empty() => n.to_string(),
+            _ => return Err(Error::EmptyFileName),
         };
+        println!("Receiving {}", filename);
         let mut data: Vec<u8> = Vec::with_capacity(1024);
         while let Some(bytes) = field.chunk().await.map_err(|_| Error::UploadFail)? {
             ctx.update(&bytes);
@@ -99,6 +106,6 @@ pub async fn uploard_api(
         };
         upload_success.push(res);
     }
-
+    
     Ok(Json(upload_success))
 }
