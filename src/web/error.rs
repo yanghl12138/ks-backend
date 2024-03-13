@@ -1,6 +1,10 @@
 use std::fmt::Display;
 
-use axum::{http::StatusCode, response::{IntoResponse, Response}, Json};
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
 use sea_orm::DbErr;
 
 use crate::Msg;
@@ -21,6 +25,10 @@ pub enum Error {
     EmptyFile,
     UnsportFileType,
 
+    // search
+    NoSuchFile,
+    ErrorSearchQuery,
+
     //
     TODO,
 }
@@ -37,6 +45,8 @@ impl Display for Error {
             Error::EmptyFile => "Empty File",
             Error::TODO => "To Do",
             Error::UnsportFileType => "UnsportFileType",
+            Error::NoSuchFile => "No Such File",
+            Error::ErrorSearchQuery => "Error Search Query",
         };
 
         write!(f, "{}", output)
@@ -49,9 +59,14 @@ impl IntoResponse for Error {
     fn into_response(self) -> Response {
         println!("-->> {:<12} -- {self:?}", "INTO-RES");
 
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(Msg {msg: self.to_string()})).into_response()
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(Msg {
+                msg: self.to_string(),
+            }),
+        )
+            .into_response()
     }
-    
 }
 
 // 数据库类型的错误默认为InternalError

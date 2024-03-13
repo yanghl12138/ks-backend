@@ -13,6 +13,10 @@ pub async fn get_txt_by_id(conn: &DatabaseConnection, id: u64) -> Result<Option<
     Txt::find_by_id(id).one(conn).await
 }
 
+pub async fn get_txt_by_user_id(conn: &DatabaseConnection, user_id: u64) -> Result<Vec<txt::Model>, DbErr> {
+    Txt::find().filter(txt::Column::UserId.eq(user_id)).all(conn).await
+}
+
 pub async fn get_txt_by_hash(conn: &DatabaseConnection, hash: &str) -> Result<Option<txt::Model>, DbErr> {
     Txt::find().filter(txt::Column::Hash.eq(hash)).one(conn).await
 }

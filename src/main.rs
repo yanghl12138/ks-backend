@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate tantivy;
 use axum::{
     extract::DefaultBodyLimit, routing::{get, post}, Json, Router
@@ -29,7 +28,9 @@ async fn main() {
         .route("/", get(root))
         .route("/login", post(login::login_api))
         .route("/whoami", get(login::whoami_api))
-        .route("/doc", post(txt::upload_api))
+        .route("/doc", post(txt::upload_api).get(txt::docs_info_api))
+        .route("/doc/:id", get(txt::doc_info_api).delete(txt::delete_doc_api))
+        .route("/query", get(txt::query_api))
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(
             50 * 1024 * 1024, /* 50mb */

@@ -27,12 +27,12 @@ async fn quick_dev() -> Result<()> {
     tokio::spawn(commiting());
     sleep(time::Duration::from_secs(5));
     println!("---");
-    let res = search_from_rev_index(SearchField::Title, vec!["燃烧".to_string(), "红色".to_string()], 129, 6).unwrap();
+    let res = search_from_rev_index(SearchField::Title, "红色 燃烧", 129, 6).unwrap();
     for e in res {
         println!("{e}")
     }
     println!("---");
-    let res = search_from_rev_index(SearchField::Body, vec!["路西恩".to_string()], 129, 6).unwrap();
+    let res = search_from_rev_index(SearchField::Body, "路西恩", 129, 0).unwrap();
     for e in res {
         println!("{e}")
     }
