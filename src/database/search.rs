@@ -9,18 +9,20 @@ use tantivy::collector::TopDocs;
 use tantivy::doc;
 use tantivy::query::QueryParser;
 use tantivy::schema::*;
+use tantivy::DocId;
 use tantivy::Index;
 use tantivy::IndexReader;
 use tantivy::IndexWriter;
 use tantivy::Opstamp;
 use tantivy::ReloadPolicy;
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
+use tantivy::Score;
+use tantivy::SegmentReader;
 use tokio::sync::RwLock;
 use tokio::time;
 use tokio::time::sleep;
 
 use crate::database::query::get_all_txt;
+use crate::database::query::read_from_fs;
 
 #[derive(Clone, Copy)]
 pub struct Fields {
@@ -128,20 +130,13 @@ pub async fn rebuild_search_index(conn: DatabaseConnection) {
         let id = txt.id;
         let title = txt.title;
         let level = txt.level;
-        let read_file = async move {
-            let mut f = File::open(format!("data/{}", &txt.hash))
-                .await
-                .expect(&format!("{} does not exist!!!", txt.hash));
-            let mut dst = String::with_capacity(4096);
-            let _ = f.read_to_string(&mut dst).await;
-            dst
-        };
+        let read_file = read_from_fs(txt.hash);
         id_title_and_join_handlers.push((id, title, level, tokio::spawn(read_file)));
     }
 
     let mut count = 0;
     for (id, title, level, jh) in id_title_and_join_handlers {
-        let body = jh.await.unwrap();
+        let body = jh.await.unwrap().unwrap();
         let _ = writer_w.add_document(doc!(
             fields.id => id,
             fields.title => title,
@@ -241,11 +236,23 @@ pub fn search_from_rev_index(
     let query_parser = QueryParser::for_index(get_index(), search_fields);
     let query = query_parser.parse_query(query_string)?;
 
-    let filter = FilterCollector::new(
-        fields.level,
-        move |v: u64| v <= level as u64,
-        TopDocs::with_limit(limit),
-    );
+    let top_doc = TopDocs::with_limit(limit).tweak_score( move |segment_reader: &SegmentReader| {
+        let level_reader = segment_reader
+            .fast_fields()
+            .u64("level")
+            .unwrap()
+            .first_or_default_col(0);
+        let user_level = level;
+
+        move |doc: DocId, original_score: Score| {
+            let doc_level: u64 = level_reader.get_val(doc);
+            let doc_level: Score = (doc_level as Score) / (user_level as Score) * 255.0;
+            let level_boost_score = ((1.0 + doc_level) as Score).log2();
+            level_boost_score * original_score
+        }
+    });
+
+    let filter = FilterCollector::new(fields.level, move |v: u64| v <= level as u64, top_doc);
     let docs = searcher.search(&query, &filter)?;
 
     let mut res = Vec::new();
@@ -255,6 +262,19 @@ pub fn search_from_rev_index(
         res.push(v);
     }
     Ok(res)
+}
+
+pub async fn add_doc_to_index(id: u64, title: String, body: String, level: u8) {
+    let fields = get_fields();
+    let doc = doc!(
+        fields.id => id,
+        fields.title => title,
+        fields.body => body,
+        fields.level => level as u64
+    );
+    let writer = get_writer();
+    let writer = writer.read().await;
+    let _ = writer.add_document(doc);
 }
 
 pub async fn delete_from_index(id: u64) -> anyhow::Result<()> {

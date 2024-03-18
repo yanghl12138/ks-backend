@@ -12,7 +12,6 @@ pub struct Model {
     pub username: String,
     pub is_admin: i8,
     pub level: u8,
-    #[sea_orm(column_type = "Text")]
     pub password: String,
 }
 

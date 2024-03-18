@@ -29,6 +29,10 @@ pub enum Error {
     NoSuchFile,
     ErrorSearchQuery,
 
+    // user
+    NoSuchUser,
+    DuplicateUserName,
+    InvalidPassword,
     //
     TODO,
 }
@@ -47,6 +51,9 @@ impl Display for Error {
             Error::UnsportFileType => "UnsportFileType",
             Error::NoSuchFile => "No Such File",
             Error::ErrorSearchQuery => "Error Search Query",
+            Error::NoSuchUser => "No Such User",
+            Error::DuplicateUserName => "Duplicate UserName",
+            Error::InvalidPassword => "Invalid Password",
         };
 
         write!(f, "{}", output)
@@ -72,6 +79,13 @@ impl IntoResponse for Error {
 // 数据库类型的错误默认为InternalError
 impl From<DbErr> for Error {
     fn from(_: DbErr) -> Self {
+        Self::InternalError
+    }
+}
+
+// io类型的错误默认为InternalError
+impl From<std::io::Error> for Error {
+    fn from(_: std::io::Error) -> Self {
         Self::InternalError
     }
 }

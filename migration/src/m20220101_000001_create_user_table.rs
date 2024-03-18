@@ -30,7 +30,7 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(User::IsAdmin).boolean().not_null())
                     .col(ColumnDef::new(User::Level).tiny_unsigned().not_null().default(0u8))
-                    .col(ColumnDef::new(User::Password).text().not_null())
+                    .col(ColumnDef::new(User::Password).string_len(64).not_null())
                     .to_owned(),
             )
             .await

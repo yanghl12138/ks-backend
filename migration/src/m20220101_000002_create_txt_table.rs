@@ -20,7 +20,7 @@ impl MigrationTrait for Migration {
                             .primary_key(),
                     )
                     .col(ColumnDef::new(Txt::Title).string_len(30).not_null())
-                    .col(ColumnDef::new(Txt::Hash).string().string_len(256).unique_key().not_null())
+                    .col(ColumnDef::new(Txt::Hash).string_len(64).unique_key().not_null())
                     .col(ColumnDef::new(Txt::UserId).big_unsigned().not_null())
                     .col(ColumnDef::new(Txt::Level).tiny_unsigned().not_null().default(0))
                     .foreign_key(
