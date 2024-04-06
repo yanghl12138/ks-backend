@@ -33,6 +33,9 @@ pub enum Error {
     NoSuchUser,
     DuplicateUserName,
     InvalidPassword,
+    EmptyUserName,
+    UserHaveDocs,
+    InvalidMoveUser,
     //
     TODO,
 }
@@ -54,6 +57,9 @@ impl Display for Error {
             Error::NoSuchUser => "No Such User",
             Error::DuplicateUserName => "Duplicate UserName",
             Error::InvalidPassword => "Invalid Password",
+            Error::EmptyUserName => "Empty UserName",
+            Error::UserHaveDocs => "User Have Docs",
+            Error::InvalidMoveUser => "Invalid Move User",
         };
 
         write!(f, "{}", output)

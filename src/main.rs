@@ -9,7 +9,11 @@ use ks_backend::{
         db::*,
         search::{commiting, init_index, rebuild_search_index},
     },
-    web::{login, txt, user},
+    web::{
+        login,
+        txt::{self, download_api},
+        user,
+    },
     AppState, Msg,
 };
 use tokio::time::{self, sleep};
@@ -46,6 +50,7 @@ async fn main() {
                 .delete(txt::delete_doc_api)
                 .put(txt::update_doc_api),
         )
+        .route("/download/:hash", get(download_api))
         .route("/query/:hash", get(txt::doc_info_hash_api))
         .route("/query", get(txt::query_api))
         .route("/index", post(txt::rebuild_index_api))
@@ -53,7 +58,10 @@ async fn main() {
             "/user",
             get(user::users_info_api).post(user::add_user_info_api),
         )
-        .route("/user/:id", get(user::user_info_api))
+        .route(
+            "/user/:id",
+            get(user::user_info_api).put(user::update_user_info_api),
+        )
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024 /* 50mb */))
         .with_state(state);

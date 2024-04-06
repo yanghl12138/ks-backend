@@ -1,6 +1,7 @@
 use std::cmp::min;
 
 use axum::extract::{Multipart, Path, Query, State};
+use axum::http::{header, HeaderMap};
 use axum::Json;
 use data_encoding::HEXUPPER;
 use ring::digest::{Context, SHA256};
@@ -8,12 +9,14 @@ use sea_orm::ModelTrait;
 use serde::Deserialize;
 use tantivy::doc;
 
+use urlencoding::encode;
+
 use super::error::*;
 use super::login::Claims;
 use crate::database::mutation::{add_txt_info, delete_file, update_doc_info, write_to_fs};
 use crate::database::query::{get_txt_by_hash, get_txt_by_id, get_txt_by_user_id, read_from_fs};
 use crate::database::search::{
-    add_doc_to_index, delete_from_index, rebuild_search_index, search_from_rev_index, SearchField
+    add_doc_to_index, delete_from_index, rebuild_search_index, search_from_rev_index, SearchField,
 };
 use crate::Msg;
 use crate::{entities::txt, AppState};
@@ -62,8 +65,9 @@ async fn save_file(
     add_doc_to_index(id, filename.clone(), txt, claims.level).await;
 
     // 返回信息
-    let new_txt_info: txt::Model = get_txt_by_id(&state.conn, id).await?
-    .ok_or(Error::InternalError)?;
+    let new_txt_info: txt::Model = get_txt_by_id(&state.conn, id)
+        .await?
+        .ok_or(Error::InternalError)?;
     println!("-->> {:<12} -- {filename:?} Saved", "SAVE_FILE");
     Ok(new_txt_info)
 }
@@ -140,6 +144,7 @@ pub async fn doc_info_hash_api(
     claims: Claims,
     Path(hash): Path<String>,
 ) -> Result<Json<txt::Model>> {
+    let hash = hash.to_ascii_uppercase();
     let doc = get_txt_by_hash(&state.conn, &hash).await?;
     match doc {
         Some(doc) if doc.level <= claims.level => Ok(Json(doc)),
@@ -172,8 +177,8 @@ pub async fn delete_doc_api(
 #[derive(Deserialize, Clone)]
 pub struct QueryArg {
     query_string: String,
-    field: String,
-    limit: usize,
+    field: Option<String>,
+    limit: Option<usize>,
 }
 
 /// 查询api
@@ -184,9 +189,9 @@ pub async fn query_api(
 ) -> Result<Json<Vec<txt::Model>>> {
     let query_string = &query_arg.query_string;
     let limit = query_arg.limit.to_owned();
-    let field = SearchField::from(query_arg.field.to_owned());
+    let field = SearchField::from(query_arg.field.to_owned().unwrap_or("All".to_string()));
 
-    let res_id = search_from_rev_index(field, query_string, claims.level, limit)
+    let res_id = search_from_rev_index(field, query_string, claims.level, limit.unwrap_or(0))
         .map_err(|_| Error::ErrorSearchQuery)?;
 
     let mut res = Vec::new();
@@ -203,14 +208,14 @@ pub async fn query_api(
 #[derive(Clone, Deserialize)]
 pub struct UpdateDocInfo {
     title: String,
-    level: u8
+    level: u8,
 }
-// 更新文档信息
+/// 更新文档信息
 pub async fn update_doc_api(
     State(state): State<AppState>,
     claims: Claims,
-    Path(doc_id):Path<u64>,
-    Json(payload): Json<UpdateDocInfo>
+    Path(doc_id): Path<u64>,
+    Json(payload): Json<UpdateDocInfo>,
 ) -> Result<Json<txt::Model>> {
     let doc = get_txt_by_id(&state.conn, doc_id).await?;
     let doc = match doc {
@@ -218,7 +223,7 @@ pub async fn update_doc_api(
         Some(doc) if doc.user_id == claims.id => doc,
         _ => return Err(Error::NoSuchFile),
     };
-    
+
     // 字符串非空，否则为原title
     let title = if payload.title.is_empty() {
         doc.title.clone()
@@ -226,7 +231,7 @@ pub async fn update_doc_api(
         payload.title
     };
     // level不超过用户level
-    let level  = min(claims.level, payload.level);
+    let level = min(claims.level, payload.level);
     // 如果没有改变，直接返回
     if level == doc.level && title == doc.title {
         let json = Ok(Json(doc));
@@ -234,10 +239,10 @@ pub async fn update_doc_api(
     }
 
     // 修改数据库
-    let doc =  update_doc_info(&state.conn, doc, title, level).await?;
+    let doc = update_doc_info(&state.conn, doc, title, level).await?;
     // 修改索引
     let _ = delete_from_index(doc.id).await;
-    let body =  read_from_fs(doc.hash.clone()).await?;
+    let body = read_from_fs(doc.hash.clone()).await?;
     add_doc_to_index(doc.id, doc.title.clone(), body, doc.level).await;
     Ok(Json(doc))
 }
@@ -247,9 +252,38 @@ pub async fn rebuild_index_api(State(state): State<AppState>, claims: Claims) ->
     if claims.is_admin == 1 {
         rebuild_search_index(state.conn).await;
         Ok(Json(Msg::from("Ok")))
-    }
-    else {
+    } else {
         Err(Error::InvalidToken)
     }
+}
 
+/// 下载文件
+pub async fn download_api(
+    State(state): State<AppState>,
+    claims: Claims,
+    Path(hash): Path<String>,
+) -> Result<(HeaderMap, String)> {
+    let hash = hash.to_ascii_uppercase();
+    // 获取文件信息
+    let doc = match get_txt_by_hash(&state.conn, &hash).await? {
+        // 鉴权
+        Some(doc) if doc.level <= claims.level => Ok(doc),
+        _ => Err(Error::NoSuchFile),
+    }?;
+
+    // 设置头
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        "text/plain; charset=utf-8".parse().unwrap(),
+    );
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        format!("attachment; filename=\"{}\"", encode(&doc.title))
+            .parse()
+            .unwrap(),
+    );
+    let body = read_from_fs(hash).await?;
+
+    Ok((headers, body))
 }

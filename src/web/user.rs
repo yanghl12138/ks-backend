@@ -1,9 +1,10 @@
-use axum::extract::Path;
+use axum::extract::{Path, Query};
 use axum::{extract::State, Json};
 use serde::Deserialize;
 
-use crate::database::mutation::add_user;
-use crate::database::query::{get_all_users, get_user_by_id, get_user_by_name};
+use crate::database::mutation::{add_user, delete_user, update_user_info};
+use crate::database::query::{get_all_users, get_txt_by_user_id, get_user_by_id, get_user_by_name};
+use crate::Msg;
 use crate::{entities::user, AppState};
 
 use super::error::*;
@@ -85,4 +86,86 @@ pub async fn add_user_info_api(
         .ok_or(Error::InternalError)?;
 
     Ok(Json(new_user))
+}
+
+#[derive(Clone, Deserialize)]
+pub struct UpdateUserInfo {
+    username: String,
+    level: u8,
+    password: String,
+}
+
+pub async fn update_user_info_api(
+    State(state): State<AppState>,
+    claims: Claims,
+    Path(id): Path<u64>,
+    Json(payload): Json<UpdateUserInfo>,
+) -> Result<Json<user::Model>> {
+    let _ = validate_admin(&claims)?;
+    // 检验用户名
+    // 非空
+    if payload.username.is_empty() {
+        return Err(Error::EmptyUserName);
+    }
+    // 非重复
+    if let Some(u) = get_user_by_name(&state.conn, &payload.username).await? {
+        if u.id != id {
+            return Err(Error::DuplicateUserName);
+        }
+    }
+    // 检验密码
+    let password_sha256 = payload.password.to_ascii_uppercase();
+    if password_sha256.len() != 64 || password_sha256 == EMPTY_PASSWORD {
+        return Err(Error::InvalidPassword);
+    }
+    // 修改用户信息
+    let user = get_user_by_id(&state.conn, id)
+        .await?
+        .ok_or(Error::NoSuchUser)?;
+    let user = update_user_info(
+        &state.conn,
+        user,
+        payload.username,
+        payload.level,
+        password_sha256,
+    )
+    .await?;
+    Ok(Json(user))
+}
+
+
+#[derive(Deserialize, Clone)]
+pub struct DeleteUserArg {
+    to: Option<u64>,
+}
+pub async fn delete_user_api(
+    State(state): State<AppState>,
+    claims: Claims,
+    Path(id): Path<u64>,
+    Query(delete_user_arg): Query<DeleteUserArg>,
+) -> Result<Msg> {
+    let _ = validate_admin(&claims)?;
+    let okmsg: Msg = Msg::from("Ok");
+    // 待删除的用户
+    let user = get_user_by_id(&state.conn, id)
+        .await?
+        .ok_or(Error::NoSuchUser)?;
+    if delete_user_arg.to.is_none() {
+        if get_txt_by_user_id(&state.conn, id).await?.is_empty() {
+            delete_user(&state.conn, user, None).await?;
+            Ok(okmsg)
+        } else {
+            Err(Error::UserHaveDocs)
+        }
+    } else {
+        let moveuser = get_user_by_id(&state.conn, delete_user_arg.to.unwrap())
+            .await?
+            .ok_or(Error::TODO)?;
+        if user.level > moveuser.level {
+            Err(Error::InvalidMoveUser)
+        } else {
+            delete_user(&state.conn, user, Some(moveuser)).await?;
+            Ok(okmsg)
+        }
+    }
 }

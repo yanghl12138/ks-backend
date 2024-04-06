@@ -14,7 +14,10 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation}
 use serde::{Deserialize, Serialize};
 
 use super::error::*;
-use crate::{database::query::get_user_by_name, AppState};
+use crate::{
+    database::query::{get_user_by_id, get_user_by_name},
+    AppState,
+};
 
 // 定义jwt key
 const JWT_SECRET: &str = "NJFU.EDU.CN";
@@ -70,17 +73,15 @@ impl AuthBody {
 
 // 从请求中提取和验证Claims
 #[async_trait]
-impl<S> FromRequestParts<S> for Claims
-where
-    S: Send + Sync,
-{
+impl FromRequestParts<AppState> for Claims {
     type Rejection = Error;
-    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self> {
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self> {
         let TypedHeader(Authorization(bearer)) = parts
             .extract::<TypedHeader<Authorization<Bearer>>>()
             .await
             .map_err(|_| Error::InvalidToken)?;
 
+        // 提取claims
         let token_data = decode::<Claims>(
             bearer.token(),
             &Keys::global().decoding,
@@ -88,7 +89,17 @@ where
         )
         .map_err(|_| Error::InvalidToken)?;
 
-        Ok(token_data.claims)
+        // 检验、更新用户信息
+        let id = token_data.claims.id;
+        let user = get_user_by_id(&state.conn, id)
+            .await?
+            .ok_or(Error::InvalidToken)?;
+
+        let mut claims = token_data.claims;
+        claims.username = user.username;
+        claims.level = user.level;
+
+        Ok(claims)
     }
 }
 
