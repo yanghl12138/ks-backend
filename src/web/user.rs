@@ -141,11 +141,11 @@ pub struct DeleteUserArg {
 pub async fn delete_user_api(
     State(state): State<AppState>,
     claims: Claims,
-    Path(id): Path<u64>,
     Query(delete_user_arg): Query<DeleteUserArg>,
-) -> Result<Msg> {
+     Path(id): Path<u64>
+) -> Result<Json<Msg>> {
     let _ = validate_admin(&claims)?;
-    let okmsg: Msg = Msg::from("Ok");
+    let okmsg = Json(Msg::from("Ok"));
     // 待删除的用户
     let user = get_user_by_id(&state.conn, id)
         .await?

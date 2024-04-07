@@ -60,7 +60,9 @@ async fn main() {
         )
         .route(
             "/user/:id",
-            get(user::user_info_api).put(user::update_user_info_api),
+            get(user::user_info_api)
+                .put(user::update_user_info_api)
+                .delete(user::delete_user_api),
         )
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(50 * 1024 * 1024 /* 50mb */))

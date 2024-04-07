@@ -31,7 +31,7 @@ pub async fn get_all_txt(conn: &DatabaseConnection) -> Result<Vec<txt::Model>, D
     Txt::find().all(conn).await
 }
 
-pub async fn read_from_fs(hash: String) -> Result<String, Error> {
+pub async fn read_file(hash: String) -> Result<String, Error> {
     let mut f = match File::open(get_file_path(&hash)).await {
         Ok(f) => f,
         Err(e) => {

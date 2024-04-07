@@ -13,8 +13,8 @@ use urlencoding::encode;
 
 use super::error::*;
 use super::login::Claims;
-use crate::database::mutation::{add_txt_info, delete_file, update_doc_info, write_to_fs};
-use crate::database::query::{get_txt_by_hash, get_txt_by_id, get_txt_by_user_id, read_from_fs};
+use crate::database::mutation::{add_txt_info, delete_file, update_doc_info, write_file};
+use crate::database::query::{get_txt_by_hash, get_txt_by_id, get_txt_by_user_id, read_file};
 use crate::database::search::{
     add_doc_to_index, delete_from_index, rebuild_search_index, search_from_rev_index, SearchField,
 };
@@ -58,7 +58,7 @@ async fn save_file(
     )
     .await?;
     //  文件写入本地
-    let _ = write_to_fs(&hash_value, txt.as_bytes())
+    let _ = write_file(&hash_value, txt.as_bytes())
         .await
         .map_err(|_| Error::InternalError)?;
     // 形成索引
@@ -242,7 +242,7 @@ pub async fn update_doc_api(
     let doc = update_doc_info(&state.conn, doc, title, level).await?;
     // 修改索引
     let _ = delete_from_index(doc.id).await;
-    let body = read_from_fs(doc.hash.clone()).await?;
+    let body = read_file(doc.hash.clone()).await?;
     add_doc_to_index(doc.id, doc.title.clone(), body, doc.level).await;
     Ok(Json(doc))
 }
@@ -283,7 +283,7 @@ pub async fn download_api(
             .parse()
             .unwrap(),
     );
-    let body = read_from_fs(hash).await?;
+    let body = read_file(hash).await?;
 
     Ok((headers, body))
 }

@@ -22,7 +22,7 @@ use tokio::time;
 use tokio::time::sleep;
 
 use crate::database::query::get_all_txt;
-use crate::database::query::read_from_fs;
+use crate::database::query::read_file;
 
 #[derive(Clone, Copy)]
 pub struct Fields {
@@ -130,7 +130,7 @@ pub async fn rebuild_search_index(conn: DatabaseConnection) {
         let id = txt.id;
         let title = txt.title;
         let level = txt.level;
-        let read_file = read_from_fs(txt.hash);
+        let read_file = read_file(txt.hash);
         id_title_and_join_handlers.push((id, title, level, tokio::spawn(read_file)));
     }
 

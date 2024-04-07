@@ -46,7 +46,7 @@ pub async fn add_user(
     Ok(res.last_insert_id)
 }
 
-pub async fn write_to_fs(hash: &str, data: &[u8]) -> Result<(), Error> {
+pub async fn write_file(hash: &str, data: &[u8]) -> Result<(), Error> {
     let mut f = File::create(get_file_path(hash)).await?;
     let _ = f.write_all(data).await?;
     _ = f.flush();
