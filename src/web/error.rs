@@ -18,7 +18,7 @@ pub enum Error {
     InternalError,
     InvalidToken,
 
-    // uploard
+    // upload
     EmptyFileName,
     UploadFail,
     DuplicateFile,
@@ -36,6 +36,7 @@ pub enum Error {
     EmptyUserName,
     UserHaveDocs,
     InvalidMoveUser,
+    NotAllowDeleteYourSelf,
     //
     TODO,
 }
@@ -60,6 +61,7 @@ impl Display for Error {
             Error::EmptyUserName => "Empty UserName",
             Error::UserHaveDocs => "User Have Docs",
             Error::InvalidMoveUser => "Invalid Move User",
+            Error::NotAllowDeleteYourSelf => "Not Allow Delete Yourself",
         };
 
         write!(f, "{}", output)

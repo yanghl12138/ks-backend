@@ -5,7 +5,7 @@ use axum::http::{header, HeaderMap};
 use axum::Json;
 use data_encoding::HEXUPPER;
 use ring::digest::{Context, SHA256};
-use sea_orm::ModelTrait;
+
 use serde::Deserialize;
 use tantivy::doc;
 
@@ -13,8 +13,8 @@ use urlencoding::encode;
 
 use super::error::*;
 use super::login::Claims;
-use crate::database::mutation::{add_txt_info, delete_file, update_doc_info, write_file};
-use crate::database::query::{get_txt_by_hash, get_txt_by_id, get_txt_by_user_id, read_file};
+use crate::database::mutation::{add_txt_info, delete_file, delete_txt_info, update_doc_info, write_file};
+use crate::database::query::{get_all_txt_lte_level, get_txt_by_hash, get_txt_by_id, read_file};
 use crate::database::search::{
     add_doc_to_index, delete_from_index, rebuild_search_index, search_from_rev_index, SearchField,
 };
@@ -117,12 +117,12 @@ pub async fn upload_api(
     Ok(Json(upload_success))
 }
 
-/// 查看用户拥有的所有文档
+/// 查看用户可见所有文档
 pub async fn docs_info_api(
     State(state): State<AppState>,
     claims: Claims,
 ) -> Result<Json<Vec<txt::Model>>> {
-    let res = get_txt_by_user_id(&state.conn, claims.id).await?;
+    let res = get_all_txt_lte_level(&state.conn, claims.level).await?;
     Ok(Json(res))
 }
 
@@ -169,7 +169,7 @@ pub async fn delete_doc_api(
     // 从文件系统中删除
     let _ = delete_file(&doc.hash).await;
     // 从数据库中删除
-    let _ = doc.delete(&state.conn).await;
+    let _ = delete_txt_info(&state.conn, doc).await;
 
     Ok(Json(Msg::from("Ok")))
 }

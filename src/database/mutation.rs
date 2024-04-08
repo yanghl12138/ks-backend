@@ -27,6 +27,14 @@ pub async fn add_txt_info(
     Ok(res.last_insert_id)
 }
 
+pub async fn delete_txt_info(
+    conn: &DatabaseConnection,
+    txt: txt::Model
+) -> Result<(), DbErr> {
+    txt.delete(conn).await?;
+    Ok(())
+}
+
 pub async fn add_user(
     conn: &DatabaseConnection,
     username: &str,
@@ -86,6 +94,7 @@ pub async fn update_user_info(
     Ok(user.update(conn).await?)
 }
 
+/// 将一个用户的所有文档转移到另一个用户
 async fn move_onwer(
     conn: &DatabaseConnection,
     from: user::Model,
@@ -105,15 +114,18 @@ async fn move_onwer(
     Ok(())
 }
 
+/// 删除某个用户
 pub async fn delete_user(
     conn: &DatabaseConnection,
     user: user::Model,
     move_to: Option<user::Model>,
 ) -> Result<(), DbErr> {
     let docs = get_txt_by_user_id(conn, user.id).await?;
+    // 没有文档直接删除
     if docs.is_empty() {
         user.delete(conn).await?;
         Ok(())
+    // 有文档，提供move_to，尝试转移文档所有权，再删除
     } else if move_to.is_some() {
         let move_to = move_to.unwrap();
         move_onwer(conn, user.clone(), move_to).await?;

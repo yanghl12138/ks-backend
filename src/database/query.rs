@@ -31,6 +31,10 @@ pub async fn get_all_txt(conn: &DatabaseConnection) -> Result<Vec<txt::Model>, D
     Txt::find().all(conn).await
 }
 
+pub async fn get_all_txt_lte_level(conn: &DatabaseConnection, level: u8) -> Result<Vec<txt::Model>, DbErr> {
+    Txt::find().filter(txt::Column::Level.lte(level)).all(conn).await
+}
+
 pub async fn read_file(hash: String) -> Result<String, Error> {
     let mut f = match File::open(get_file_path(&hash)).await {
         Ok(f) => f,

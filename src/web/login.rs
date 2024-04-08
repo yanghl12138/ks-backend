@@ -20,7 +20,7 @@ use crate::{
 };
 
 // 定义jwt key
-const JWT_SECRET: &str = "NJFU.EDU.CN";
+const JWT_SECRET: &str = "灌注空灵lml谢谢喵";
 pub struct Keys {
     encoding: EncodingKey,
     decoding: DecodingKey,
@@ -105,9 +105,9 @@ impl FromRequestParts<AppState> for Claims {
 
 pub async fn login_api(
     state: State<AppState>,
-    Json(paylord): Json<LoginPayload>,
+    Json(payload): Json<LoginPayload>,
 ) -> Result<Json<AuthBody>> {
-    let user = match get_user_by_name(&state.conn, &paylord.username).await {
+    let user = match get_user_by_name(&state.conn, &payload.username).await {
         Ok(user) => match user {
             Some(user) => user,
             None => {
@@ -118,8 +118,8 @@ pub async fn login_api(
             return Err(Error::InternalError);
         }
     };
-
-    if user.password == paylord.password {
+    let password = payload.password.to_ascii_uppercase();
+    if user.password == password {
         let claims = Claims {
             exp: {
                 let time: usize = SystemTime::now()

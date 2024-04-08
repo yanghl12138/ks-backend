@@ -146,23 +146,32 @@ pub async fn delete_user_api(
 ) -> Result<Json<Msg>> {
     let _ = validate_admin(&claims)?;
     let okmsg = Json(Msg::from("Ok"));
+    // 不允许自己删除自己
+    if id == claims.id {
+        return Err(Error::NotAllowDeleteYourSelf)
+    }
     // 待删除的用户
     let user = get_user_by_id(&state.conn, id)
         .await?
         .ok_or(Error::NoSuchUser)?;
+    // 未提供to
     if delete_user_arg.to.is_none() {
+        // 检测是否有文档
         if get_txt_by_user_id(&state.conn, id).await?.is_empty() {
             delete_user(&state.conn, user, None).await?;
             Ok(okmsg)
         } else {
             Err(Error::UserHaveDocs)
         }
+    // 提供to
     } else {
+        // 获取moveuser
         let moveuser = get_user_by_id(&state.conn, delete_user_arg.to.unwrap())
             .await?
             .ok_or(Error::TODO)?;
-        if user.level > moveuser.level {
+        if user.level > moveuser.level || user.id == moveuser.id {
             Err(Error::InvalidMoveUser)
+        // moveuser.level必须大于等于user.level，且moveuser和user不能是同一个
         } else {
             delete_user(&state.conn, user, Some(moveuser)).await?;
             Ok(okmsg)
