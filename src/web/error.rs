@@ -11,7 +11,7 @@ use crate::Msg;
 
 pub type Result<T> = core::result::Result<T, Error>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Error {
     // login
     LoginFail,
@@ -68,6 +68,17 @@ impl Display for Error {
     }
 }
 
+impl From<Error> for StatusCode {
+    fn from(value: Error) -> Self {
+        match value {
+            Error::LoginFail | Error::InvalidToken => StatusCode::UNAUTHORIZED,
+            Error::InternalError | Error::TODO => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::NoSuchFile | Error::NoSuchUser => StatusCode::NOT_FOUND,
+            _ => StatusCode::NOT_ACCEPTABLE
+        }
+    }
+}
+
 impl std::error::Error for Error {}
 
 impl IntoResponse for Error {
@@ -75,7 +86,7 @@ impl IntoResponse for Error {
         println!("-->> {:<12} -- {self:?}", "INTO-RES");
 
         (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::from(self),
             Json(Msg {
                 msg: self.to_string(),
             }),
