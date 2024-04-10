@@ -6,8 +6,7 @@ use axum::{
 };
 use ks_backend::{
     database::{
-        db::*,
-        search::{commiting, init_index, rebuild_search_index},
+        db::*, init_datadir, search::{commiting, init_index, rebuild_search_index}
     },
     web::{
         login,
@@ -23,6 +22,8 @@ use tower_http::limit::RequestBodyLimitLayer;
 async fn main() {
     // 初始化索引
     init_index();
+    // 初始化文件存储
+    init_datadir().await.unwrap();
 
     // 获取数据库
     println!("-->{:<12} --- Connect to DataBase...", "MAIN");
@@ -43,13 +44,14 @@ async fn main() {
         .route("/", get(root))
         .route("/login", post(login::login_api))
         .route("/whoami", get(login::whoami_api))
-        .route("/doc", post(txt::upload_api).get(txt::docs_info_api))
+        .route("/doc", post(txt::upload_doc_api).get(txt::docs_info_api))
         .route(
             "/doc/:id",
             get(txt::doc_info_api)
                 .delete(txt::delete_doc_api)
                 .put(txt::update_doc_api),
         )
+        .route("/doc/multi-upload", post(txt::upload_docs_api))
         .route("/download/:hash", get(download_api))
         .route("/query/:hash", get(txt::doc_info_hash_api))
         .route("/query", get(txt::query_api))

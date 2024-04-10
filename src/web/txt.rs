@@ -13,7 +13,9 @@ use urlencoding::encode;
 
 use super::error::*;
 use super::login::Claims;
-use crate::database::mutation::{add_txt_info, delete_file, delete_txt_info, update_doc_info, write_file};
+use crate::database::mutation::{
+    add_txt_info, delete_file, delete_txt_info, update_doc_info, write_file,
+};
 use crate::database::query::{get_all_txt_lte_level, get_txt_by_hash, get_txt_by_id, read_file};
 use crate::database::search::{
     add_doc_to_index, delete_from_index, rebuild_search_index, search_from_rev_index, SearchField,
@@ -72,8 +74,38 @@ async fn save_file(
     Ok(new_txt_info)
 }
 
-/// 文件上传，接受multipartform
-pub async fn upload_api(
+/// 单文件上传，接受multipartform，成功返回文件信息，失败返回错误信息
+pub async fn upload_doc_api(
+    State(state): State<AppState>,
+    claims: Claims,
+    mut multipart: Multipart,
+) -> Result<Json<txt::Model>> {
+    if let Some(mut field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| Error::UploadFail)?
+    {
+        let mut ctx = Context::new(&SHA256);
+        let filename = match field.file_name() {
+            Some(n) if !n.is_empty() => n.to_string(),
+            _ => return Err(Error::EmptyFileName),
+        };
+        println!("Receiving {}", filename);
+        let mut data: Vec<u8> = Vec::with_capacity(1024);
+        while let Some(bytes) = field.chunk().await.map_err(|_| Error::UploadFail)? {
+            ctx.update(&bytes);
+            data.extend(bytes);
+        }
+        let hash_value: String = HEXUPPER.encode(ctx.finish().as_ref());
+        let doc  = save_file(state, claims, filename, data, hash_value).await?;
+        Ok(Json(doc))
+    } else {
+        Err(Error::EmptyFile)
+    }
+}
+
+/// 多文件上传，接受multipartform，返回上传成功的文件信息
+pub async fn upload_docs_api(
     State(state): State<AppState>,
     claims: Claims,
     mut multipart: Multipart,
