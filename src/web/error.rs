@@ -97,14 +97,16 @@ impl IntoResponse for Error {
 
 // 数据库类型的错误默认为InternalError
 impl From<DbErr> for Error {
-    fn from(_: DbErr) -> Self {
+    fn from(e: DbErr) -> Self {
+        println!("-->> {:<12} -- {e:?}", "FROM-DbErr");
         Self::InternalError
     }
 }
 
 // io类型的错误默认为InternalError
 impl From<std::io::Error> for Error {
-    fn from(_: std::io::Error) -> Self {
+    fn from(e: std::io::Error) -> Self {
+        println!("-->> {:<12} -- {e:?}", "FROM-IoErr");
         Self::InternalError
     }
 }

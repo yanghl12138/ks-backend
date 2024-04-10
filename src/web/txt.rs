@@ -86,9 +86,12 @@ pub async fn upload_doc_api(
         .map_err(|_| Error::UploadFail)?
     {
         let mut ctx = Context::new(&SHA256);
-        let filename = match field.file_name() {
+        let filename = match field.name() {
             Some(n) if !n.is_empty() => n.to_string(),
-            _ => return Err(Error::EmptyFileName),
+            _ => match field.file_name() {
+                Some(n) if !n.is_empty() => n.to_string(),
+                _ => return Err(Error::EmptyFileName)
+            },
         };
         println!("Receiving {}", filename);
         let mut data: Vec<u8> = Vec::with_capacity(1024);
@@ -119,9 +122,12 @@ pub async fn upload_docs_api(
         .map_err(|_| Error::UploadFail)?
     {
         let mut ctx = Context::new(&SHA256);
-        let filename = match field.file_name() {
+        let filename = match field.name() {
             Some(n) if !n.is_empty() => n.to_string(),
-            _ => return Err(Error::EmptyFileName),
+            _ => match field.file_name() {
+                Some(n) if !n.is_empty() => n.to_string(),
+                _ => return Err(Error::EmptyFileName)
+            },
         };
         println!("Receiving {}", filename);
         let mut data: Vec<u8> = Vec::with_capacity(1024);
