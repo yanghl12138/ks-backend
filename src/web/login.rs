@@ -107,17 +107,9 @@ pub async fn login_api(
     state: State<AppState>,
     Json(payload): Json<LoginPayload>,
 ) -> Result<Json<AuthBody>> {
-    let user = match get_user_by_name(&state.conn, &payload.username).await {
-        Ok(user) => match user {
-            Some(user) => user,
-            None => {
-                return Err(Error::LoginFail);
-            }
-        },
-        Err(_) => {
-            return Err(Error::InternalError);
-        }
-    };
+    let user = get_user_by_name(&state.conn, &payload.username)
+        .await?
+        .ok_or(Error::LoginFail)?;
     let password = payload.password.to_ascii_uppercase();
     if user.password == password {
         let claims = Claims {

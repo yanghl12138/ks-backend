@@ -37,6 +37,7 @@ pub enum Error {
     UserHaveDocs,
     InvalidMoveUser,
     NotAllowDeleteYourSelf,
+    InvalidLevel,
     //
     TODO,
 }
@@ -62,6 +63,7 @@ impl Display for Error {
             Error::UserHaveDocs => "User Have Docs",
             Error::InvalidMoveUser => "Invalid Move User",
             Error::NotAllowDeleteYourSelf => "Not Allow Delete Yourself",
+            Error::InvalidLevel => "Invalid Level",
         };
 
         write!(f, "{}", output)

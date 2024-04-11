@@ -82,15 +82,20 @@ pub async fn update_doc_info(
 pub async fn update_user_info(
     conn: &DatabaseConnection,
     user: user::Model,
-    username: String,
-    level: u8,
-    password: String,
+    username: Option<String>,
+    level: Option<u8>,
+    password: Option<String>,
 ) -> Result<user::Model, DbErr> {
     let mut user: user::ActiveModel = user.into();
-    user.username = Set(username);
-    user.level = Set(level);
-    user.password = Set(password);
-
+    if let Some(username) = username {
+        user.username = Set(username);
+    }
+    if let Some(level) = level {
+        user.level = Set(level);
+    }
+    if let Some(password) = password {
+        user.password = Set(password);
+    }
     Ok(user.update(conn).await?)
 }
 
