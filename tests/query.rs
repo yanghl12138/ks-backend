@@ -9,7 +9,7 @@ use ks_backend::database::{db::get_db, mutation::write_file, query::{get_txt_max
 use ring::digest::{Context, SHA256};
 use data_encoding::HEXUPPER;
 
-
+use urlencoding::{encode, decode};
 
 
 #[tokio::test]
@@ -39,6 +39,14 @@ async fn query_test() -> Result<()> {
     //
     let res = get_txt_maxlevel_by_userid(&conn, 3).await.unwrap();
     println!("{res:?}");
+
+    //
+    let sc = "你好";
+    let se = "Hello";
+    let sce = encode(sc);
+    println!("{sce}");
+    let sced = decode("(%E4%BD%A0%E5%A5%BD)").unwrap();
+    println!("{sced}");
 
     Ok(())
 }

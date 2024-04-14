@@ -9,7 +9,7 @@ use ring::digest::{Context, SHA256};
 use serde::Deserialize;
 use tantivy::doc;
 
-use urlencoding::encode;
+use urlencoding::{decode, encode};
 
 use super::error::*;
 use super::login::Claims;
@@ -90,7 +90,7 @@ pub async fn upload_doc_api(
             Some(n) if !n.is_empty() => n.to_string(),
             _ => match field.file_name() {
                 Some(n) if !n.is_empty() => n.to_string(),
-                _ => return Err(Error::EmptyFileName)
+                _ => return Err(Error::EmptyFileName),
             },
         };
         println!("Receiving {}", filename);
@@ -100,7 +100,7 @@ pub async fn upload_doc_api(
             data.extend(bytes);
         }
         let hash_value: String = HEXUPPER.encode(ctx.finish().as_ref());
-        let doc  = save_file(state, claims, filename, data, hash_value).await?;
+        let doc = save_file(state, claims, filename, data, hash_value).await?;
         Ok(Json(doc))
     } else {
         Err(Error::EmptyFile)
@@ -126,7 +126,7 @@ pub async fn upload_docs_api(
             Some(n) if !n.is_empty() => n.to_string(),
             _ => match field.file_name() {
                 Some(n) if !n.is_empty() => n.to_string(),
-                _ => return Err(Error::EmptyFileName)
+                _ => return Err(Error::EmptyFileName),
             },
         };
         println!("Receiving {}", filename);
@@ -225,11 +225,11 @@ pub async fn query_api(
     claims: Claims,
     query_arg: Query<QueryArg>,
 ) -> Result<Json<Vec<txt::Model>>> {
-    let query_string = &query_arg.query_string;
+    let query_string = decode(&query_arg.query_string).map_err(|_| Error::ErrorSearchQuery)?;
     let limit = query_arg.limit.to_owned();
     let field = SearchField::from(query_arg.field.to_owned().unwrap_or("All".to_string()));
 
-    let res_id = search_from_rev_index(field, query_string, claims.level, limit.unwrap_or(0))
+    let res_id = search_from_rev_index(field, &query_string, claims.level, limit.unwrap_or(0))
         .map_err(|_| Error::ErrorSearchQuery)?;
 
     let mut res = Vec::new();
