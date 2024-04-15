@@ -6,11 +6,21 @@ use crate::database::mutation::{add_user, delete_user, update_user_info};
 use crate::database::query::{
     get_all_users, get_txt_by_user_id, get_txt_maxlevel_by_userid, get_user_by_id, get_user_by_name,
 };
+use crate::entities::user::Model;
 use crate::Msg;
 use crate::{entities::user, AppState};
 
 use super::error::*;
 use super::login::Claims;
+
+const EMPTY_PASSWORD: &str = "EC3395932920B3DA7BE44CFE7673CA15EA24DE40214905CEE00EE274F8C1CE6F";
+
+impl Model {
+    /// 清除密码信息
+    pub fn clear_password(&mut self) {
+        self.password = EMPTY_PASSWORD.to_string();
+    }
+}
 
 /// 验证是否为admin
 #[inline]
@@ -28,7 +38,10 @@ pub async fn users_info_api(
 ) -> Result<Json<Vec<user::Model>>> {
     let _ = validate_admin(&claims)?;
 
-    let users = get_all_users(&state.conn).await?;
+    let mut users = get_all_users(&state.conn).await?;
+    for user in &mut users {
+        (*user).clear_password();
+    }
     Ok(Json(users))
 }
 
@@ -43,12 +56,14 @@ pub async fn user_info_api(
     let user = get_user_by_id(&state.conn, id).await?;
 
     match user {
-        Some(user) => Ok(Json(user)),
+        Some(mut user) => {
+            user.clear_password();
+            Ok(Json(user))
+        },
         None => Err(Error::NoSuchUser),
     }
 }
 
-const EMPTY_PASSWORD: &str = "EC3395932920B3DA7BE44CFE7673CA15EA24DE40214905CEE00EE274F8C1CE6F";
 #[derive(Deserialize, Debug, Clone)]
 pub struct NewUser {
     username: String,
@@ -83,9 +98,10 @@ pub async fn add_user_info_api(
         false,
     )
     .await?;
-    let new_user = get_user_by_id(&state.conn, user_id)
+    let mut new_user = get_user_by_id(&state.conn, user_id)
         .await?
         .ok_or(Error::InternalError)?;
+    new_user.clear_password();
 
     Ok(Json(new_user))
 }
@@ -141,7 +157,7 @@ pub async fn update_user_info_api(
     let user = get_user_by_id(&state.conn, id)
         .await?
         .ok_or(Error::NoSuchUser)?;
-    let user = update_user_info(
+    let mut user = update_user_info(
         &state.conn,
         user,
         payload.username,
@@ -149,6 +165,7 @@ pub async fn update_user_info_api(
         password_sha256,
     )
     .await?;
+    user.clear_password();
     Ok(Json(user))
 }
 
