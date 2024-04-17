@@ -6,7 +6,9 @@ use axum::{
 };
 use ks_backend::{
     database::{
-        db::*, init_datadir, search::{commiting, init_index, rebuild_search_index}
+        db::*,
+        init_datadir,
+        search::{commiting, init_index, rebuild_search_index},
     },
     web::{
         login,
@@ -21,7 +23,7 @@ use tower_http::limit::RequestBodyLimitLayer;
 #[tokio::main]
 async fn main() {
     // 初始化索引
-    init_index();
+    let jh_init_index = tokio::spawn(init_index());
     // 初始化文件存储
     init_datadir().await.unwrap();
 
@@ -36,6 +38,7 @@ async fn main() {
     // 初始化admin
     let jh_admin_index = tokio::spawn(init_admin_user(conn.clone()));
     // 建立索引
+    let _ = jh_init_index.await.unwrap();
     let jh_build_index = tokio::spawn(rebuild_search_index(conn.clone()));
 
     let state = AppState { conn };

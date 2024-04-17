@@ -7,8 +7,12 @@ use tantivy::collector::Count;
 use tantivy::collector::FilterCollector;
 use tantivy::collector::TopDocs;
 use tantivy::doc;
+use tantivy::query::AllQuery;
 use tantivy::query::QueryParser;
+use tantivy::query::RangeQuery;
 use tantivy::schema::*;
+use tantivy::tokenizer::StopWordFilter;
+use tantivy::tokenizer::TextAnalyzer;
 use tantivy::DocId;
 use tantivy::Index;
 use tantivy::IndexReader;
@@ -17,6 +21,8 @@ use tantivy::Opstamp;
 use tantivy::ReloadPolicy;
 use tantivy::Score;
 use tantivy::SegmentReader;
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
 use tokio::sync::RwLock;
 use tokio::time;
 use tokio::time::sleep;
@@ -58,8 +64,23 @@ pub fn get_fields() -> Fields {
     unsafe { FIELDS.expect("NO FILEDS!!!").clone() }
 }
 
-pub fn init_index() {
+async fn get_stopwords() -> Vec<String> {
+    let path = "resource/stopword.txt";
+    let mut f = File::open(path).await.unwrap();
+    let mut ss = String::with_capacity(1400 * 3);
+    let _ = f.read_to_string(&mut ss).await;
+    let res: Vec<&str> = ss.split(char::is_whitespace).collect();
+    let mut stopwords = Vec::with_capacity(1400);
+    for word in res {
+        stopwords.push(word.to_string());
+    }
+    stopwords
+}
+
+pub async fn init_index() {
     println!("-->> {:<12} -- start to init", "INIT_INDEX");
+    // 开始取得停用词
+    let jh = tokio::spawn(get_stopwords());
 
     let mut schema_builder = Schema::builder();
 
@@ -85,8 +106,14 @@ pub fn init_index() {
         body,
         level,
     };
+    // 获得停用词
+    let stopwords = jh.await.unwrap();
+    println!("-->> {:<12} -- have {} stopwords", "INIT_INDEX", stopwords.len());
     // 建立索引
-    let tokenizer = tantivy_jieba::JiebaTokenizer {};
+    let jieba = tantivy_jieba::JiebaTokenizer {};
+    let tokenizer = TextAnalyzer::builder(jieba)
+        .filter(StopWordFilter::remove(stopwords))
+        .build();
     let index = Index::create_in_ram(schema.clone());
     index.tokenizers().register("jieba", tokenizer);
 
@@ -199,16 +226,13 @@ impl From<SearchField> for Vec<Field> {
     }
 }
 
-pub fn count_match_doc(field: SearchField, query_string: &str, level: u8) -> anyhow::Result<usize> {
+pub fn count_doc(level: u8) -> anyhow::Result<usize> {
     let fields = get_fields();
-    let search_fields = Vec::from(field);
 
     let reader = get_reader();
     let searcher = reader.searcher();
 
-    let query_parser = QueryParser::for_index(get_index(), search_fields);
-    let query = query_parser.parse_query(query_string)?;
-
+    let query = AllQuery;
     let filter = FilterCollector::new(fields.level, move |v: u64| v <= level as u64, Count);
     let count = searcher.search(&query, &filter)?;
     Ok(count)
@@ -219,10 +243,10 @@ pub fn search_from_rev_index(
     query_string: &str,
     level: u8,
     limit: usize,
-) -> anyhow::Result<Vec<u64>> {
+) -> anyhow::Result<Vec<(u64, f32)>> {
     // 若limit为0，自动设置limit值
     let limit = if limit == 0 {
-        max(1, count_match_doc(field, query_string, level)?)
+        max(1, count_doc(level)?)
     } else {
         limit
     };
@@ -236,7 +260,7 @@ pub fn search_from_rev_index(
     let query_parser = QueryParser::for_index(get_index(), search_fields);
     let query = query_parser.parse_query(query_string)?;
 
-    let top_doc = TopDocs::with_limit(limit).tweak_score( move |segment_reader: &SegmentReader| {
+    let top_doc = TopDocs::with_limit(limit).tweak_score(move |segment_reader: &SegmentReader| {
         let level_reader = segment_reader
             .fast_fields()
             .u64("level")
@@ -247,7 +271,7 @@ pub fn search_from_rev_index(
         move |doc: DocId, original_score: Score| {
             let doc_level: u64 = level_reader.get_val(doc);
             let doc_level: Score = (doc_level as Score) / (user_level as Score) * 255.0;
-            let level_boost_score = ((1.0 + doc_level) as Score).log2();
+            let level_boost_score = (1.0 + ((1.0 + doc_level) as Score).log2()) / 9.0;
             level_boost_score * original_score
         }
     });
@@ -255,11 +279,11 @@ pub fn search_from_rev_index(
     let filter = FilterCollector::new(fields.level, move |v: u64| v <= level as u64, top_doc);
     let docs = searcher.search(&query, &filter)?;
 
-    let mut res = Vec::new();
-    for (_, doc_add) in docs {
+    let mut res: Vec<(u64, f32)> = Vec::new();
+    for (score, doc_add) in docs {
         let doc: Document = searcher.doc(doc_add)?;
         let v = doc.get_first(fields.id).unwrap().as_u64().unwrap();
-        res.push(v);
+        res.push((v, score));
     }
     Ok(res)
 }

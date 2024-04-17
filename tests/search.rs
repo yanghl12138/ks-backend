@@ -28,7 +28,7 @@ async fn search_test(
     let res = search_from_rev_index(field, "红色 燃烧", level, limit)?;
     let mut docs = Vec::new();
 
-    for id in res {
+    for (id, _) in res {
         let doc = get_txt_by_id(conn, id).await?;
         match doc {
             Some(doc) => docs.push(doc),

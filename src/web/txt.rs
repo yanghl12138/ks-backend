@@ -6,7 +6,7 @@ use axum::Json;
 use data_encoding::HEXUPPER;
 use ring::digest::{Context, SHA256};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tantivy::doc;
 
 use urlencoding::{decode, encode};
@@ -218,13 +218,24 @@ pub struct QueryArg {
     field: Option<String>,
     limit: Option<usize>,
 }
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct QueryResult {
+    doc: txt::Model,
+    score: f32,
+}
+
+impl QueryResult {
+    pub fn new(doc: txt::Model, score: f32) -> QueryResult {
+        QueryResult { doc, score }
+    }
+}
 
 /// 查询api
 pub async fn query_api(
     State(state): State<AppState>,
     claims: Claims,
     query_arg: Query<QueryArg>,
-) -> Result<Json<Vec<txt::Model>>> {
+) -> Result<Json<Vec<QueryResult>>> {
     let query_string = decode(&query_arg.query_string).map_err(|_| Error::ErrorSearchQuery)?;
     let limit = query_arg.limit.to_owned();
     let field = SearchField::from(query_arg.field.to_owned().unwrap_or("All".to_string()));
@@ -233,10 +244,10 @@ pub async fn query_api(
         .map_err(|_| Error::ErrorSearchQuery)?;
 
     let mut res = Vec::new();
-    for id in res_id {
+    for (id, score) in res_id {
         // println!("-->>{:<12} -- {id}", "QUERY_API");
         match get_txt_by_id(&state.conn, id).await? {
-            Some(doc) => res.push(doc),
+            Some(doc) => res.push(QueryResult::new(doc, score)),
             None => (),
         }
     }
@@ -245,8 +256,8 @@ pub async fn query_api(
 
 #[derive(Clone, Deserialize)]
 pub struct UpdateDocInfo {
-    title: String,
-    level: u8,
+    title: Option<String>,
+    level: Option<u8>,
 }
 /// 更新文档信息
 pub async fn update_doc_api(
@@ -261,19 +272,39 @@ pub async fn update_doc_api(
         Some(doc) if doc.user_id == claims.id => doc,
         _ => return Err(Error::NoSuchFile),
     };
-
-    // 字符串非空，否则为原title
-    let title = if payload.title.is_empty() {
-        doc.title.clone()
-    } else {
-        payload.title
+    let title = {
+        // 字符串非空，否则为原title
+        if let Some(tit) = payload.title {
+            if tit.is_empty() {
+                Some(doc.title.clone())
+            } else {
+                Some(tit)
+            }
+        } else {
+            None
+        }
     };
-    // level不超过用户level
-    let level = min(claims.level, payload.level);
+
+    // level不超过用户level，否则为用户level
+    let level = {
+        if let Some(lev) = payload.level {
+            let level = min(claims.level, lev);
+            Some(level)
+        } else {
+            None
+        }
+    };
+
     // 如果没有改变，直接返回
-    if level == doc.level && title == doc.title {
-        let json = Ok(Json(doc));
-        return json;
+    if level.is_none() && title.is_none() {
+        return Ok(Json(doc));
+    }
+    if let Some(level) = level {
+        if let Some(title) = &title {
+            if level == doc.level && doc.title == *title {
+                return Ok(Json(doc));
+            }
+        }
     }
 
     // 修改数据库

@@ -69,12 +69,16 @@ pub async fn delete_file(hash: &str) -> Result<(), Error> {
 pub async fn update_doc_info(
     conn: &DatabaseConnection,
     doc: txt::Model,
-    title: String,
-    level: u8,
+    title: Option<String>,
+    level: Option<u8>,
 ) -> Result<txt::Model, DbErr> {
     let mut doc: txt::ActiveModel = doc.into();
-    doc.title = Set(title);
-    doc.level = Set(level);
+    if let Some(title) = title {
+        doc.title = Set(title);
+    }
+    if let Some(level) = level {
+        doc.level = Set(level);
+    }
 
     Ok(doc.update(conn).await?)
 }

@@ -59,7 +59,7 @@ pub async fn user_info_api(
         Some(mut user) => {
             user.clear_password();
             Ok(Json(user))
-        },
+        }
         None => Err(Error::NoSuchUser),
     }
 }
@@ -76,25 +76,28 @@ pub struct NewUser {
 pub async fn add_user_info_api(
     State(state): State<AppState>,
     claims: Claims,
-    Json(paylord): Json<NewUser>,
+    Json(payload): Json<NewUser>,
 ) -> Result<Json<user::Model>> {
     let _ = validate_admin(&claims)?;
-    // 验证用户名唯一
-    match get_user_by_name(&state.conn, &paylord.username).await? {
+    // 验证用户名非空且唯一
+    if payload.username.is_empty() {
+        return Err(Error::EmptyUserName);
+    }
+    match get_user_by_name(&state.conn, &payload.username).await? {
         Some(_) => return Err(Error::DuplicateUserName),
         None => (),
     }
     // 验证密码，sha256，非空
-    let password_sha256 = paylord.password.to_ascii_uppercase();
+    let password_sha256 = payload.password.to_ascii_uppercase();
     if password_sha256.len() != 64 || password_sha256 == EMPTY_PASSWORD {
         return Err(Error::InvalidPassword);
     }
     //
     let user_id = add_user(
         &state.conn,
-        &paylord.username,
+        &payload.username,
         &password_sha256,
-        paylord.level,
+        payload.level,
         false,
     )
     .await?;
@@ -121,7 +124,7 @@ pub async fn update_user_info_api(
 ) -> Result<Json<user::Model>> {
     let _ = validate_admin(&claims)?;
     // 检验用户名
-    if let Some(username) = payload.username.clone() {
+    if let Some(username) = &payload.username {
         // 非空
         if username.is_empty() {
             return Err(Error::EmptyUserName);
@@ -135,7 +138,7 @@ pub async fn update_user_info_api(
     }
     let mut password_sha256: Option<String> = None;
     // 检验密码
-    if let Some(password) = payload.password.clone() {
+    if let Some(password) = &payload.password {
         let password = password.to_ascii_uppercase();
         if password.len() != 64 || password == EMPTY_PASSWORD {
             return Err(Error::InvalidPassword);
@@ -189,27 +192,27 @@ pub async fn delete_user_api(
     let user = get_user_by_id(&state.conn, id)
         .await?
         .ok_or(Error::NoSuchUser)?;
-    // 未提供to
-    if delete_user_arg.to.is_none() {
-        // 检测是否有文档
-        if get_txt_by_user_id(&state.conn, id).await?.is_empty() {
-            delete_user(&state.conn, user, None).await?;
-            Ok(okmsg)
+    // 若无文档
+    if get_txt_by_user_id(&state.conn, id).await?.is_empty() {
+        delete_user(&state.conn, user, None).await?;
+        Ok(okmsg)
+    // 若有文档
+    } else {
+        // 提供moveuser
+        if let Some(to) = delete_user_arg.to {
+            let moveuser = get_user_by_id(&state.conn, to)
+                .await?
+                .ok_or(Error::TODO)?;
+            if user.level > moveuser.level || user.id == moveuser.id {
+                Err(Error::InvalidMoveUser)
+            // moveuser.level必须大于等于user.level，且moveuser和user不能是同一个
+            } else {
+                delete_user(&state.conn, user, Some(moveuser)).await?;
+                Ok(okmsg)
+            }
+        // 未提供moveuser
         } else {
             Err(Error::UserHaveDocs)
-        }
-    // 提供to
-    } else {
-        // 获取moveuser
-        let moveuser = get_user_by_id(&state.conn, delete_user_arg.to.unwrap())
-            .await?
-            .ok_or(Error::TODO)?;
-        if user.level > moveuser.level || user.id == moveuser.id {
-            Err(Error::InvalidMoveUser)
-        // moveuser.level必须大于等于user.level，且moveuser和user不能是同一个
-        } else {
-            delete_user(&state.conn, user, Some(moveuser)).await?;
-            Ok(okmsg)
         }
     }
 }
