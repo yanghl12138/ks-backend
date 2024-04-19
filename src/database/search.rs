@@ -9,7 +9,6 @@ use tantivy::collector::TopDocs;
 use tantivy::doc;
 use tantivy::query::AllQuery;
 use tantivy::query::QueryParser;
-use tantivy::query::RangeQuery;
 use tantivy::schema::*;
 use tantivy::tokenizer::StopWordFilter;
 use tantivy::tokenizer::TextAnalyzer;
@@ -55,7 +54,6 @@ pub fn get_writer() -> Arc<RwLock<IndexWriter>> {
 pub fn get_reader() -> &'static IndexReader {
     unsafe {
         let reader = READER.expect("NO READER!!!");
-        let _ = reader.reload();
         reader
     }
 }
@@ -121,7 +119,7 @@ pub async fn init_index() {
     let writer: Arc<RwLock<IndexWriter>> = Arc::new(RwLock::new(writer));
     let reader: tantivy::IndexReader = index
         .reader_builder()
-        .reload_policy(ReloadPolicy::Manual)
+        .reload_policy(ReloadPolicy::OnCommit)
         .try_into()
         .unwrap();
 
