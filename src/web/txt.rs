@@ -126,7 +126,7 @@ pub async fn upload_docs_api(
             Some(n) if !n.is_empty() => n.to_string(),
             _ => match field.file_name() {
                 Some(n) if !n.is_empty() => n.to_string(),
-                _ => return Err(Error::EmptyFileName),
+                _ => continue,
             },
         };
         println!("Receiving {}", filename);

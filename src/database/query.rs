@@ -75,7 +75,7 @@ pub async fn get_txt_maxlevel_by_userid(
 ) -> Result<Option<u8>, DbErr> {
     #[derive(Debug, FromQueryResult)]
     struct SelectResult {
-        max_level: u8,
+        max_level: Option<u8>,
     }
     let res = Txt::find()
         .select_only()
@@ -84,9 +84,14 @@ pub async fn get_txt_maxlevel_by_userid(
         .into_model::<SelectResult>()
         .one(conn)
         .await?;
-    let res = match res {
-        Some(m) => Some(m.max_level),
-        None => None,
+    let res = if let Some(res) = res {
+        if let Some(v) = res.max_level {
+            Some(v)
+        } else {
+            None
+        }
+    } else {
+        None
     };
     Ok(res)
 }

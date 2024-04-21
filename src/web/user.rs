@@ -124,28 +124,36 @@ pub async fn update_user_info_api(
 ) -> Result<Json<user::Model>> {
     let _ = validate_admin(&claims)?;
     // 检验用户名
-    if let Some(username) = &payload.username {
+    let username = 
+    if let Some(username) = payload.username {
         // 非空
         if username.is_empty() {
-            return Err(Error::EmptyUserName);
-        }
-        // 非重复
-        if let Some(u) = get_user_by_name(&state.conn, &username).await? {
-            if u.id != id {
-                return Err(Error::DuplicateUserName);
+            None
+        } else {
+            // 非重复
+            if let Some(u) = get_user_by_name(&state.conn, &username).await? {
+                if u.id != id {
+                    return Err(Error::DuplicateUserName);
+                }
+                None
+            } else {
+                Some(username)
             }
         }
-    }
-    let mut password_sha256: Option<String> = None;
-    // 检验密码
-    if let Some(password) = &payload.password {
+    } else {
+        None
+    };
+    let password_sha256  = 
+    if let Some(password) = payload.password {
         let password = password.to_ascii_uppercase();
         if password.len() != 64 || password == EMPTY_PASSWORD {
             return Err(Error::InvalidPassword);
         } else {
-            password_sha256 = Some(password);
+            Some(password)
         }
-    }
+    } else {
+        None
+    };
 
     // 验证level
     if let Some(level) = payload.level {
@@ -163,7 +171,7 @@ pub async fn update_user_info_api(
     let mut user = update_user_info(
         &state.conn,
         user,
-        payload.username,
+        username,
         payload.level,
         password_sha256,
     )
