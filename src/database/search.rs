@@ -268,8 +268,8 @@ pub fn search_from_rev_index(
 
         move |doc: DocId, original_score: Score| {
             let doc_level: u64 = level_reader.get_val(doc);
-            let doc_level: Score = (doc_level as Score) / (user_level as Score) * 255.0;
-            let level_boost_score = (1.0 + ((1.0 + doc_level) as Score).log2()) / 9.0;
+            let doc_level: Score = (doc_level as Score + 1.0) / (user_level as Score + 1.0) * 255.0;
+            let level_boost_score =  ((1.0 + doc_level) as Score).log2() / 8.0;
             level_boost_score * original_score
         }
     });
